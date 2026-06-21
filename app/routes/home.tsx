@@ -29,8 +29,6 @@ type IconName =
   | "reports"
   | "search"
   | "settings"
-  | "stop"
-  | "pause"
   | "view";
 
 type DashboardTab = "personal" | "firm" | "feed";
@@ -257,9 +255,6 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [timeEntrySeconds, setTimeEntrySeconds] = useState(0);
   const [isTimeEntryOpen, setIsTimeEntryOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [historyEntries, setHistoryEntries] = useState<TimeEntry[]>([]);
-  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
 
   useEffect(() => {
     if (!isTimerRunning) {
@@ -302,7 +297,6 @@ export default function Home() {
         elapsedSeconds={elapsedSeconds}
         isTimerRunning={isTimerRunning}
         onTimerClick={toggleTimer}
-        onHistoryClick={() => setIsHistoryOpen(true)}
       />
       <div className="app-frame">
         <Sidebar />
@@ -561,12 +555,10 @@ function TopBar({
   elapsedSeconds,
   isTimerRunning,
   onTimerClick,
-  onHistoryClick,
 }: {
   elapsedSeconds: number;
   isTimerRunning: boolean;
   onTimerClick: () => void;
-  onHistoryClick: () => void;
 }) {
   return (
     <header className="top-bar">
@@ -579,26 +571,19 @@ function TopBar({
         <kbd>Ctrl + K</kbd>
       </label>
       <div className={isTimerRunning ? "top-actions timer-running" : "top-actions"}>
-        <div className="timer-group">
-          <button
-            aria-label={isTimerRunning ? "Stop timer and edit entry" : "Start timer"}
-            className={isTimerRunning ? "timer-button running" : "timer-button"}
-            onClick={onTimerClick}
-            title={isTimerRunning ? "Stop timer" : "Start timer"}
-            type="button"
-          >
-            <Icon name={isTimerRunning ? "pause" : "play"} />
-            <strong>{formatElapsedTime(elapsedSeconds)}</strong>
-          </button>
-          <button
-            className="icon-button history-button"
-            type="button"
-            title="Recent activity"
-            onClick={onHistoryClick}
-          >
-            <Icon name="clock" />
-          </button>
-        </div>
+        <button
+          aria-label={isTimerRunning ? "Stop timer and edit entry" : "Start timer"}
+          className="timer-button"
+          onClick={onTimerClick}
+          title={isTimerRunning ? "Stop timer" : "Start timer"}
+          type="button"
+        >
+          <Icon name="play" />
+          <strong>{formatElapsedTime(elapsedSeconds)}</strong>
+        </button>
+        <button className="icon-button history-button" type="button" title="Recent activity">
+          <Icon name="clock" />
+        </button>
         <button className="create-button" type="button">
           Create new
           <Icon name="plus" />
@@ -665,26 +650,24 @@ type TimeEntry = {
 
 function TimeEntryModal({
   elapsedSeconds,
-  editingEntry,
   onClose,
   onDeleteHistoryEntry,
   onUpsertHistoryEntry,
 }: {
   elapsedSeconds: number;
-  editingEntry?: TimeEntry | null;
   onClose: () => void;
   onDeleteHistoryEntry: (entryId: number) => void;
   onUpsertHistoryEntry: (entry: TimeEntry) => void;
 }) {
-  const [duration, setDuration] = useState(editingEntry ? editingEntry.duration : formatDurationHours(elapsedSeconds));
-  const [matterQuery, setMatterQuery] = useState(editingEntry ? editingEntry.matter : "");
-  const [activityQuery, setActivityQuery] = useState(editingEntry ? editingEntry.activity : "");
-  const [description, setDescription] = useState(editingEntry ? editingEntry.description : "");
+  const [duration, setDuration] = useState(formatDurationHours(elapsedSeconds));
+  const [matterQuery, setMatterQuery] = useState("");
+  const [activityQuery, setActivityQuery] = useState("");
+  const [description, setDescription] = useState("");
   const [matterOpen, setMatterOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
-  const [nonBillable, setNonBillable] = useState(editingEntry ? editingEntry.nonBillable : false);
-  const [showOnBill, setShowOnBill] = useState(editingEntry ? editingEntry.showOnBill : false);
-  const [writtenOff, setWrittenOff] = useState(editingEntry ? editingEntry.writtenOff : false);
+  const [nonBillable, setNonBillable] = useState(false);
+  const [showOnBill, setShowOnBill] = useState(false);
+  const [writtenOff, setWrittenOff] = useState(false);
   const [showMatterWarning, setShowMatterWarning] = useState(false);
   const [pendingAction, setPendingAction] = useState<TimeEntryAction | null>(null);
   const [confirmation, setConfirmation] = useState<{
@@ -694,7 +677,9 @@ function TimeEntryModal({
     confirmLabel: string;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState("");
-  const [replaySeconds, setReplaySeconds] = useState(editingEntry ? parseInt(editingEntry.entryTime.split(":")[0]) * 3600 + parseInt(editingEntry.entryTime.split(":")[1]) * 60 + parseInt(editingEntry.entryTime.split(":")[2]) : elapsedSeconds);
+  const [historyEntries, setHistoryEntries] = useState<TimeEntry[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [replaySeconds, setReplaySeconds] = useState(elapsedSeconds);
 
   const showOnBillDisabled = !nonBillable || writtenOff;
   const nonBillableDisabled = writtenOff;
@@ -829,7 +814,8 @@ function TimeEntryModal({
     const nextAction = pendingAction === "createAnother" || pendingAction === "duplicate" ? pendingAction : "save";
     setShowMatterWarning(false);
     setPendingAction(null);
-    executeSaveAction(nextAction, nextAction === "save");
+    executeSaveAction(nextAction, false);
+    setIsHistoryOpen(true);
   }
 
   function closeConfirmation() {
@@ -999,7 +985,7 @@ function TimeEntryModal({
             </div>
           )}
 
-          <footer className={showMatterWarning ? "modal-footer hidden" : "modal-footer"}>
+          <footer className="modal-footer">
             <button className="primary-action" onClick={() => handleAction("save")} type="button">
               Save entry
             </button>
@@ -1034,6 +1020,8 @@ function TimeEntryModal({
           onConfirm={confirmDialogAction}
         />
       )}
+
+      {isHistoryOpen && <EntryHistoryModal entries={historyEntries} onClose={() => setIsHistoryOpen(false)} />}
     </div>
   );
 }
@@ -1048,7 +1036,7 @@ function SearchableEmptySelect({
   placeholder,
   query,
 }: {
-  error?: string;
+  error: string;
   id: string;
   isOpen: boolean;
   label: string;
@@ -1133,45 +1121,16 @@ function ConfirmDialog({
 
 function EntryHistoryModal({
   entries,
-  currentTimer,
   onClose,
-  onNewTimeEntry,
-  onEditEntry,
 }: {
   entries: TimeEntry[];
-  currentTimer: number;
   onClose: () => void;
-  onNewTimeEntry: () => void;
-  onEditEntry: (entry: TimeEntry) => void;
 }) {
-  const now = new Date();
-  const subtitle = now.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  const displaySubtitle = `${subtitle.replace(", ", " (today), ")}`;
-  const currentTime = formatElapsedTime(currentTimer);
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
         <header className="history-header">
-          <div className="history-header-left">
-            <div className="history-nav-buttons">
-              <button type="button" aria-label="Previous day">
-                <Icon name="chevronLeft" />
-              </button>
-              <button type="button" aria-label="Next day">
-                <Icon name="chevronRight" />
-              </button>
-            </div>
-            <div>
-              <h3 id="history-title">Timekeeper</h3>
-              <p className="history-subtitle">{displaySubtitle}</p>
-            </div>
-          </div>
-          <div className="history-header-right">{currentTime}</div>
+          <h3 id="history-title">Time entry saved</h3>
           <button aria-label="Close history" onClick={onClose} type="button">
             <Icon name="close" />
           </button>
@@ -1220,14 +1179,9 @@ function EntryHistoryModal({
           )}
         </div>
         <footer className="history-footer">
-          <button className="secondary-action" type="button">
-            View all time entries
+          <button className="primary-action" type="button" onClick={onClose}>
+            Close
           </button>
-          <div className="history-footer-actions">
-            <button className="primary-action" type="button" onClick={onNewTimeEntry}>
-              New time entry
-            </button>
-          </div>
         </footer>
       </section>
     </div>
@@ -1693,18 +1647,6 @@ function Icon({ name }: { name: IconName }) {
       return (
         <svg {...common}>
           <path d="M8 5v14l11-7-11-7Z" />
-        </svg>
-      );
-    case "pause":
-      return (
-        <svg {...common}>
-          <path d="M8 6h3v12H8zM13 6h3v12h-3z" />
-        </svg>
-      );
-    case "stop":
-      return (
-        <svg {...common}>
-          <rect x="7" y="7" width="10" height="10" rx="2" />
         </svg>
       );
     case "plus":
